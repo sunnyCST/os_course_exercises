@@ -3,17 +3,64 @@
 ## 视频相关思考题
 ### 12.1 进程切换
 
-1. 进程切换的可能时机有哪些？
+1. 进程切换的可能时机有哪些？  
+> 时间片用完、被高优先级进程抢占、进入等待状态、进程结束 中断或系统调用返回时判断是否需要进程切换。如果需要，则实施切换。  
 
-2. 分析ucore的进程切换代码，说明ucore的进程切换触发时机和进程切换的判断时机都有哪些。
+2. 分析ucore的进程切换代码，说明ucore的进程切换触发时机和进程切换的判断时机都有哪些。  
+> 进程基本信息  
+> 进程状态信息  
+> 进程执行现场保存  
+> 进程队列指针
 
-3. ucore的进程控制块数据结构是如何组织的？主要字段分别表示什么？
+3. ucore的进程控制块数据结构是如何组织的？主要字段分别表示什么？  
+>     struct proc_struct {
+    enum proc_state state;  // Process state
+    int pid;// Process ID
+    int runs;   // the running times of Proces
+    uintptr_t kstack;   // Process kernel stack
+    volatile bool need_resched; // bool value: need to be rescheduled to release CPU?
+    struct proc_struct *parent; // the parent process
+    struct mm_struct *mm;   // Process's memory management field
+    struct context context; // Switch here to run process
+    struct trapframe *tf;   // Trap frame for current interrupt
+    uintptr_t cr3;  // CR3 register: the base addr of Page Directroy Table(PDT)
+    uint32_t flags; // Process flag
+    char name[PROC_NAME_LEN + 1];   // Process name
+    list_entry_t list_link; // Process link list 
+    list_entry_t hash_link; // Process hash list
+    };
+
 
 ### 12.2 进程创建
 
-1. fork()的返回值是唯一的吗？父进程和子进程的返回值是不同的。请找到相应的赋值代码。
+1. fork()的返回值是唯一的吗？父进程和子进程的返回值是不同的。请找到相应的赋值代码。  
+> 子进程的返回值为0，这在copy_thread()中通过指定eax为0实现    
 
-2. 新进程创建时的进程标识是如何设置的？请指明相关代码。
+
+>     // copy_thread - setup the trapframe on the  process's kernel stack top and
+    // - setup the kernel entry point and stack of process
+    static void
+    copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
+    proc->tf = (struct trapframe *)(proc->kstack + KSTACKSIZE) - 1;
+    *(proc->tf) = *tf;
+    proc->tf->tf_regs.reg_eax = 0;
+    proc->tf->tf_esp = esp;
+    proc->tf->tf_eflags |= FL_IF;
+    proc->context.eip = (uintptr_t)forkret;
+    proc->context.esp = (uintptr_t)(proc->tf);
+    }
+
+> 父进程的返回值为子进程的pid，这在do_fork()中通过设置ret为子进程pid实现  
+
+>      ret = proc->pid;
+      fork_out:
+      return ret;
+
+
+2. 新进程创建时的进程标识是如何设置的？请指明相关代码。  
+> `get_pid();`  
+> 获取一个新的PID
+
 
 3. 请通过fork()的例子中进程标识的赋值顺序说明进程的执行顺序。
 
@@ -32,7 +79,9 @@
 
 2. 试分析ucore操作系统内核是如何把子进程exit()的返回值传递给父进程wait()的？
 
-3. 什么是僵尸进程和孤儿进程？
+3. 什么是僵尸进程和孤儿进程？  
+> 子进程通过exit()退出时，父进程既没有结束，也没有通过wait()等待子进程结束，则子进程成为“僵尸进程(zombie)”
+
 
 4. 试分析sleep()系统调用的实现。在什么地方设置的定时器？它对应的等待队列是哪个？它的唤醒操作在什么地方？
 
